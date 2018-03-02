@@ -1,5 +1,5 @@
 class Blend4jPluginGrailsPlugin {
-	def version = '16.2'
+	def version = '18.1-SNAPSHOT'
 	def grailsVersion = '2.3 > *'
 	def title = 'Blend4j Plugin'
 	def author = 'Transmart Foundation'
