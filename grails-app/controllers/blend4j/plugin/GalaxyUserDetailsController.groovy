@@ -2,86 +2,61 @@ package blend4j.plugin
 
 class GalaxyUserDetailsController {
 
-    def galaxyUserDetailsService;
+	GalaxyUserDetailsService galaxyUserDetailsService
 
-    def list = {
-        if (!params.max) {
-            params.max = 999999
-        }
-        [personList: GalaxyUserDetails.list(params)]
-    }
+	def list() {
+		if (!params.max) {
+			params.max = 999999
+		}
+		[personList: GalaxyUserDetails.list(params)]
+	}
 
-//    def show = {
-//        def person = UserDetails.get(params.id)
-//        if (!person) {
-//            flash.message = "Galaxy User not found with id $params.id"
-//            redirect action: list
-//            return
-//        }
-//        [person: person]
-//    }
+	def update(GalaxyUserDetails person) {
+		person.properties = params
 
-//    def edit = {
-//        def person = UserDetails.get(params.id)
-//        if (!person) {
-//            flash.message = "Galaxy User not found with id $params.id"
-//            redirect action: list
-//            return
-//        }
-//        return person
-//    }
+		if (!params.mailAddress) {
+			flash.message = 'Please enter an email'
+			render view: 'edit', model: [person: person]
+			return
+		}
+	}
 
-    /**
-     * Person update action.
-     */
-    def update = {
-        def person = GalaxyUserDetails.get(params.id)
-        person.properties = params
+	def create() {
+		[person: new GalaxyUserDetails(params)]
+	}
 
-        if (params.mailAddress == null || params.mailAddress == "") {
-            flash.message = 'Please enter an email'
-            return render(view: 'edit', model: [person: new GalaxyUserDetails(params)])
-        }
+	def delete() {
+		flash.message = 'User deleted'
+		galaxyUserDetailsService.deleteUser(params.id)
+		render view: 'list'
+	}
 
-    }
+	def save(String username, String galaxyKey, String mailAddress) {
 
-    def create = {
-        [person: new GalaxyUserDetails(params)]
-    }
+		String message
+		if (!username) {
+			message = 'Please enter a username'
+		}
+		else if (!galaxyKey) {
+			message = 'Please enter a Galaxy Key'
+		}
+		else if (!mailAddress) {
+			message = 'Please enter an email'
+		}
 
-    def delete = {
-        flash.message = 'User deleted';
-        System.err.println(params);
-        galaxyUserDetailsService.deleteUser(params.id);
-        render(view: 'list')
-    }
+		if (message) {
+			flash.message = message
+			render view: 'create', model: [person: new GalaxyUserDetails(params)]
+			return
+		}
 
-    /**
-     * Person save action.
-     */
-    def save = {
+		if (galaxyUserDetailsService.saveNewGalaxyUser(username, galaxyKey, mailAddress)) {
+			flash.message = 'User Created'
+		}
+		else {
+			flash.message = 'Cannot create user'
+		}
 
-        if (params.username == null || params.username == "") {
-            flash.message = 'Please enter a username'
-            return render(view: 'create', model: [person: new GalaxyUserDetails(params)])
-        }
-        if (params.galaxyKey == null || params.galaxyKey == "") {
-            flash.message = 'Please enter a Galaxy Key'
-            return render(view: 'create', model: [person: new GalaxyUserDetails(params)])
-        }
-        if (params.mailAddress == null || params.mailAddress == "") {
-            flash.message = 'Please enter an email'
-            return render(view: 'create', model: [person: new GalaxyUserDetails(params)])
-        }
-
-        Boolean isSaved = galaxyUserDetailsService.saveNewGalaxyUser(params.username, params.galaxyKey, params.mailAddress)
-        if (isSaved) {
-            flash.message = 'User Created'
-
-        }else{
-            flash.message = 'Cannot create user'
-        }
-        render(view: 'create', model: [person: new GalaxyUserDetails()])
-    }
-
+		render view: 'create', model: [person: new GalaxyUserDetails()]
+	}
 }

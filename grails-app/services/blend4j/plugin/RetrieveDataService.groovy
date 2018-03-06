@@ -10,171 +10,149 @@ import com.github.jmchilton.blend4j.galaxy.beans.LibraryFolder
 import com.recomdata.transmart.domain.i2b2.AsyncJob
 import com.sun.jersey.api.client.ClientResponse
 import grails.transaction.Transactional
-import org.apache.commons.lang.StringUtils
-import org.json.JSONArray
 import org.json.JSONObject
 
-@Transactional
 class RetrieveDataService {
 
-    def saveStatusOfExport(String nameOfTheExportJob, String nameOfTheLibrary) {
-        try{
-            def newJob = new StatusOfExport();
-            newJob.jobName = nameOfTheExportJob;
-            newJob.jobStatus = "Started";
-            newJob.lastExportName = nameOfTheLibrary;
-            newJob.lastExportTime = new Date();
-            newJob.save();
-        }catch(e){
-            log.error("The export job for galaxy couldn't be saved")
-            return false;
-        }
-        return true;
-    }
+	@Transactional
+	boolean saveStatusOfExport(String exportJobName, String lbraryName) {
+		try {
+			new StatusOfExport(
+					jobName: exportJobName,
+					jobStatus: 'Started',
+					lastExportName: lbraryName,
+					lastExportTime: new Date()).save()
+			true
+		}
+		catch (e) {
+			log.error "The export job for galaxy couldn't be saved"
+			false
+		}
+	}
 
-    def updateStatusOfExport(String nameOfTheExportJob, String newState) {
-        try{
-            def idOfTheExportJob = getLatest(StatusOfExport.findAllByJobName(nameOfTheExportJob)).id;
-            def newJob = StatusOfExport.get(idOfTheExportJob);
-            newJob.jobStatus = newState;
-            newJob.save();
-        }catch(e){
-            log.error("The export job for galaxy couldn't be updated")
-            return false;
-        }
-        return true;
-    }
+	@Transactional
+	boolean updateStatusOfExport(String exportJobName, String newState) {
+		try {
+			StatusOfExport newJob = getLatest(StatusOfExport.findAllByJobName(exportJobName))
+			newJob.jobStatus = newState
+			newJob.save()
+			true
+		}
+		catch (e) {
+			log.error("The export job for galaxy couldn't be updated")
+			false
+		}
+	}
 
-    def uploadExportFolderToGalaxy(String galaxyURL, String  tempFolderDirectory, String idOfTheUser,  String nameOfTheExportJob, String nameOfTheLibrary){
+	void uploadExportFolderToGalaxy(String galaxyUrl, String tempFolderDirectory, String userId,
+	                                String exportJobName, String libraryName) {
 
-        def apiKey = GalaxyUserDetails.findByUsername(idOfTheUser).getGalaxyKey();
-        final String email = GalaxyUserDetails.findByUsername(idOfTheUser).getMailAddress();
-        final GalaxyInstance galaxyInstance = GalaxyInstanceFactory.get(galaxyURL, apiKey);
-        String tempDir = tempFolderDirectory.toString() + "/" + nameOfTheExportJob;
+		GalaxyUserDetails gud = GalaxyUserDetails.findByUsername(userId)
 
-        final Library library = new Library(nameOfTheLibrary+ " - " + email);
-        final LibrariesClient client = galaxyInstance.getLibrariesClient();
-        final Library persistedLibrary = client.createLibrary(library);
-        final LibraryContent rootFolder = client.getRootFolder(persistedLibrary.getId());
-        final LibraryFolder folder = new LibraryFolder();
-        folder.setName(nameOfTheExportJob)
-        folder.setFolderId(rootFolder.getId());
+		LibrariesClient client = GalaxyInstanceFactory.get(galaxyUrl, gud.galaxyKey).librariesClient
+		Library persistedLibrary = client.createLibrary(new Library(libraryName + ' - ' + gud.mailAddress))
+		LibraryFolder folder = new LibraryFolder(
+				name: exportJobName,
+				folderId: client.getRootFolder(persistedLibrary.id).id)
 
-        LibraryFolder resultFolder = client.createFolder(persistedLibrary.getId(), folder);
-        assert resultFolder.getName().equals(nameOfTheExportJob);
-        assert resultFolder.getId() != null;
+		LibraryFolder resultFolder = client.createFolder(persistedLibrary.id, folder)
+		assert resultFolder.name == exportJobName
+		assert resultFolder.id != null
 
-        File repoFolder = new File(tempDir);
-        File[] listOfFiles = repoFolder.listFiles();
-        createFoldersAndFiles(listOfFiles, resultFolder, client, persistedLibrary.getId());
-    }
+		File[] files = new File(tempFolderDirectory, exportJobName).listFiles()
+		createFoldersAndFiles(files, resultFolder, client, persistedLibrary.id)
+	}
 
-    def createFoldersAndFiles = { File[] listOfFiles, LibraryFolder rootFolder, LibrariesClient client, String persistedLibraryId ->
-        for (int i = 0; i < listOfFiles.length; i++) {
-            if (listOfFiles[i].isFile()) {
-                try {
-                    File testFile = listOfFiles[i];
-                    FileLibraryUpload upload = new FileLibraryUpload();
-                    upload.setFolderId(rootFolder.getId());
-                    upload.setName(testFile.getName().toString());
-                    upload.setFileType("tabular");
-                    upload.setFile(testFile);
-                    ClientResponse resultFile = client.uploadFile(persistedLibraryId, upload);
-                    assert resultFile.getStatus() == 200: resultFile.getEntity(String.class);
-                } catch (final IOException ioException) {
-                    throw new RuntimeException(ioException);
-                }
-            } else if (listOfFiles[i].isDirectory()) {
-                LibraryFolder folder = new LibraryFolder();
-                folder.setName(listOfFiles[i].getName().toString())
-                folder.setFolderId(rootFolder.getId());
+	void createFoldersAndFiles(File[] files, LibraryFolder rootFolder, LibrariesClient client, String persistedLibraryId) {
+		for (File file in files) {
+			if (file.isFile()) {
+				try {
+					FileLibraryUpload upload = new FileLibraryUpload(
+							folderId: rootFolder.id,
+							name: file.name,
+							fileType: 'tabular',
+							file: file)
+					ClientResponse resultFile = client.uploadFile(persistedLibraryId, upload)
+					assert resultFile.status == 200: resultFile.getEntity(String)
+				}
+				catch (IOException e) {
+					throw new RuntimeException(e)
+				}
+			}
+			else if (file.isDirectory()) {
+				LibraryFolder folder = new LibraryFolder(name: file.name, folderId: rootFolder.id)
+				LibraryFolder resultFolder = client.createFolder(persistedLibraryId, folder)
+				assert resultFolder.name == file.name
+				assert resultFolder.id != null
 
-                File[] listOfChildrenFiles = listOfFiles[i].listFiles();
+				createFoldersAndFiles(file.listFiles(), resultFolder, client, persistedLibraryId)
+			}
+		}
+	}
 
-                LibraryFolder resultFolder = client.createFolder(persistedLibraryId, folder);
-                assert resultFolder.getName().equals(listOfFiles[i].getName());
-                assert resultFolder.getId() != null;
+	/**
+	 * Get the jobs to show in the galaxy jobs tab
+	 */
+	Map getjobs(String userName, String jobType = null) {
+		List<Map> rows = []
 
-                createFoldersAndFiles(listOfChildrenFiles, resultFolder, client, persistedLibraryId);
-            }
-        }
-    }
+		List<AsyncJob> jobs = AsyncJob.createCriteria() {
+			like('jobName', userName + '%')
+			if (jobType) {
+				eq('jobType', jobType)
+			}
+			else {
+				or {
+					ne('jobType', 'DataExport')
+					isNull('jobType')
+				}
+			}
+			ge('lastRunOn', new Date() - 7)
+			order('lastRunOn', 'desc')
+		}
 
-    /**
-     * Method that will get the list of jobs to show in the galaxy jobs tab
-     */
-    def getjobs(String userName, jobType = null) {
-        JSONObject result = new JSONObject()
-        JSONArray rows = new JSONArray()
+		for (AsyncJob job in jobs) {
+			Map m = [altViewerURL: job.altViewerURL,
+			         jobInputsJson: new JSONObject(job.jobInputsJson ?: '{}'),
+			         name: job.jobName,
+			         runTime: job.jobStatusTime,
+			         startDate: job.lastRunOn,
+			         status: job.jobStatus,
+			         viewerURL: job.viewerURL]
+			StatusOfExport d = getLatest(StatusOfExport.findAllByJobName(job.jobName))
+			if (d) {
+				m.lastExportName = d.lastExportName
+				m.lastExportTime = d.lastExportTime.toString()
+				m.exportStatus = d.jobStatus
+			}
+			else {
+				m.lastExportName = 'Never Exported'
+				m.lastExportTime = ' '
+				m.exportStatus = ' '
+			}
+			rows << m
+		}
 
-        def jobResults = null
-        def c = AsyncJob.createCriteria()
-        if (StringUtils.isNotEmpty(jobType)) {
-            jobResults = c {
-                like("jobName", "${userName}%")
-                eq("jobType", "${jobType}")
-                ge("lastRunOn", new Date()-7)
-                order("lastRunOn", "desc")
-            }
-        } else {
-            jobResults = c {
-                like("jobName", "${userName}%")
-                or {
-                    ne("jobType", "DataExport")
-                    isNull("jobType")
-                }
-                ge("lastRunOn", new Date()-7)
-                order("lastRunOn", "desc")
-            }
-        }
+		[success: true, totalCount: jobs.size(), jobs: rows]
+	}
 
-        def m = [:]
-        def d
-        for (jobResult in jobResults)	{
-            m = [:]
-            m["name"] = jobResult.jobName
-            m["status"] = jobResult.jobStatus
-            m["runTime"] = jobResult.jobStatusTime
-            m["startDate"] = jobResult.lastRunOn
-            m["viewerURL"] = jobResult.viewerURL
-            m["altViewerURL"] = jobResult.altViewerURL
-            m["jobInputsJson"] = new JSONObject(jobResult.jobInputsJson ?: "{}")
-            d = getLatest(StatusOfExport.findAllByJobName(jobResult.jobName));
-            if(!d.equals(null) ) {
-                m["lastExportName"] = d.lastExportName;
-                m["lastExportTime"] = d.lastExportTime.toString();
-                m["exportStatus"] = d.jobStatus;
-            }else{
-                m["lastExportName"] = "Never Exported";
-                m["lastExportTime"] = " ";
-                m["exportStatus"] = " ";
-            }
-            rows.put(m)
-        }
+	// TODO don't pull everything from the database and sort client-side to get the most recent
+	private StatusOfExport getLatest(List<StatusOfExport> exports) {
 
-        result.put("success", true)
-        result.put("totalCount", jobResults.size())
-        result.put("jobs", rows)
-
-        return result
-    }
-
-    private def getLatest(ArrayList<?> exports){
-
-        switch (exports.size()){
-            case 0:
-                log.error("An error has occured while exporting to galaxy. The job name doesn't existe in the database");
-                return null;
-            case 1:
-                return exports[0];
-            default:
-                def latest = exports[0];
-                for(i in 1..exports.size()-1){
-                    if(exports[i].id > latest.id){
-                        latest = exports[i];
-                    }
-                }
-                return latest;
-        }
-    }
+		switch (exports.size()) {
+			case 0:
+				log.error("An error has occured while exporting to galaxy. The job name doesn't exist in the database")
+				return null
+			case 1:
+				return exports[0]
+			default:
+				def latest = exports[0]
+				for (i in 1..exports.size() - 1) {
+					if (exports[i].id > latest.id) {
+						latest = exports[i]
+					}
+				}
+				return latest
+		}
+	}
 }

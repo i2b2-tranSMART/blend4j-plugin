@@ -1,38 +1,38 @@
 package blend4j.plugin
 
 import grails.converters.JSON
+import org.springframework.beans.factory.annotation.Value
 
-class RetrieveDataController  {
+class RetrieveDataController {
 
-    def springSecurityService
-    def retrieveDataService
+	RetrieveDataService retrieveDataService
+	def springSecurityService
 
-    def JobExportToGalaxy = {
-        final  galaxyURL = grailsApplication.config.com.galaxy.blend4j.galaxyURL;
-        final tempFolderDirectory  = grailsApplication.config.com.recomdata.plugins.tempFolderDirectory
-        final String idOfTheUser = springSecurityService.getPrincipal().username;
+	@Value('${com.galaxy.blend4j.galaxyURL:}')
+	private String galaxyUrl
 
-        def statusOK = retrieveDataService.saveStatusOfExport(params.nameOfTheExportJob,params.nameOfTheLibrary);
-        if(statusOK){
-            retrieveDataService.uploadExportFolderToGalaxy(galaxyURL, tempFolderDirectory.toString(),idOfTheUser, params.nameOfTheExportJob, params.nameOfTheLibrary );
-            retrieveDataService.updateStatusOfExport(params.nameOfTheExportJob,"Done");
-        }else{
-            retrieveDataService.updateStatusOfExport(params.nameOfTheExportJob,"Error");
-        }
+	@Value('${com.recomdata.plugins.tempFolderDirectory:}')
+	private String tempFolderDirectory
 
-        render([statusOk: statusOK] as JSON)
-    }
+	def JobExportToGalaxy(String nameOfTheExportJob, String nameOfTheLibrary) {
+		boolean ok = retrieveDataService.saveStatusOfExport(nameOfTheExportJob, nameOfTheLibrary)
+		if (ok) {
+			retrieveDataService.uploadExportFolderToGalaxy(galaxyUrl, tempFolderDirectory,
+					springSecurityService.principal.username, nameOfTheExportJob, nameOfTheLibrary)
+			retrieveDataService.updateStatusOfExport(nameOfTheExportJob, 'Done')
+		}
+		else {
+			retrieveDataService.updateStatusOfExport(nameOfTheExportJob, 'Error')
+		}
 
-    /**
-     * Method that will create the get the list of jobs to show in the galaxy jobs tab
-     */
-    def getjobs = {
-        def username = springSecurityService.getPrincipal().username
-        def result = retrieveDataService.getjobs(username, "DataExport")
+		render([statusOk: ok] as JSON)
+	}
 
-        response.setContentType("text/json")
-        response.outputStream << result?.toString()
-    }
-
-
+	/**
+	 * Get the jobs to show in the galaxy jobs tab
+	 */
+	def getjobs() {
+		Map jobs = retrieveDataService.getjobs(springSecurityService.principal.username, 'DataExport')
+		render(jobs as JSON)
+	}
 }

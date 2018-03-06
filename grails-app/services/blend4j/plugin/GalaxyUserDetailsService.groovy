@@ -5,23 +5,18 @@ import grails.transaction.Transactional
 @Transactional
 class GalaxyUserDetailsService {
 
-        def saveNewGalaxyUser(String username, String galaxyKey, String mailAddress) {
-            try{
-                def galaxyUser = new GalaxyUserDetails()
-                galaxyUser.username = username;
-                galaxyUser.galaxyKey = galaxyKey;
-                galaxyUser.mailAddress = mailAddress;
-                galaxyUser.save();
-            }catch(e){
-                log.error("The export job for galaxy couldn't be saved")
-                return false;
-            }
-            return true;
-        }
+	boolean saveNewGalaxyUser(String username, String galaxyKey, String mailAddress) {
+		try {
+			new GalaxyUserDetails(username: username, galaxyKey: galaxyKey, mailAddress: mailAddress).save()
+			true
+		}
+		catch (e) {
+			log.error("The export job for galaxy couldn't be saved")
+			false
+		}
+	}
 
-    def deleteUser(def username){
-        def galaxyUser = GalaxyUserDetails.findByUsername(username.toString());
-        galaxyUser.delete();
-    }
-
+	void deleteUser(String username) {
+		GalaxyUserDetails.findByUsername(username).delete()
+	}
 }
