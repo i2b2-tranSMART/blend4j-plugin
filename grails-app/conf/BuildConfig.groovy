@@ -18,6 +18,7 @@ grails.project.dependency.resolution = {
 	dependencies {
 		compile 'com.github.jmchilton.blend4j:blend4j:0.1.2'
 		compile 'org.json:json:20090211'
+		test 'org.grails:grails-datastore-test-support:1.0.2-grails-2.4'
 	}
 
 	plugins {
@@ -27,5 +28,7 @@ grails.project.dependency.resolution = {
 		build ':release:3.1.2', ':rest-client-builder:2.1.1', {
 			export = false
 		}
+
+		runtime ':hibernate:3.6.10.19', { export = false }
 	}
 }

@@ -69,7 +69,7 @@ class RetrieveDataService {
 
 		GalaxyUserDetails gud = GalaxyUserDetails.findWhere(username: securityService.currentUsername())
 
-		LibrariesClient client = GalaxyInstanceFactory.get(galaxyUrl, gud.galaxyKey).librariesClient
+		LibrariesClient client = getLibrariesClient(galaxyUrl, gud.galaxyKey)
 		Library persistedLibrary = client.createLibrary(new Library(libraryName + ' - ' + gud.mailAddress))
 		LibraryFolder folder = new LibraryFolder(
 				name: exportJobName,
@@ -81,6 +81,10 @@ class RetrieveDataService {
 
 		File[] files = new File(tempFolderDirectory, exportJobName).listFiles()
 		createFoldersAndFiles(files, resultFolder, client, persistedLibrary.id)
+	}
+
+	protected LibrariesClient getLibrariesClient(String galaxyUrl, String galaxyKey) {
+		GalaxyInstanceFactory.get(galaxyUrl, galaxyKey).librariesClient
 	}
 
 	private void createFoldersAndFiles(File[] files, LibraryFolder rootFolder,
