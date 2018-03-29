@@ -7,7 +7,7 @@ grails.project.dependency.resolution = {
 	log 'warn'
 
 	repositories {
-		mavenLocal() // Note: use 'grails maven-install' to install required plugins locally
+		mavenLocal()
 		grailsCentral()
 		mavenCentral()
 		mavenRepo 'http://ec2-35-170-59-132.compute-1.amazonaws.com:8080/artifactory/plugins-snapshots'
@@ -22,6 +22,7 @@ grails.project.dependency.resolution = {
 
 	plugins {
 		compile ':transmart-legacy-db:18.1-SNAPSHOT'
+		compile ':transmart-shared:18.1-SNAPSHOT'
 
 		build ':release:3.1.2', ':rest-client-builder:2.1.1', {
 			export = false

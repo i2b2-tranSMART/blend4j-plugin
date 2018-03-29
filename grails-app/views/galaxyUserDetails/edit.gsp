@@ -9,7 +9,7 @@
 	<g:if test="${flash.message}"><div class="message">${flash.message}</div></g:if>
 	<g:hasErrors bean="${person}">
 	<div class="errors">
-		<g:renderErrors bean="${person}" as="list"/>
+		<g:renderErrors bean="${person}" as='list'/>
 	</div>
 	</g:hasErrors>
 	<div class="prop">
@@ -43,7 +43,7 @@
 				<tr class="prop">
 					<td valign="top" class="name"><label for="enabled">Enabled:</label></td>
 					<td valign="top" class="value ${hasErrors(bean: person, field: 'enabled', 'errors')}">
-						<g:checkBox name="enabled" value="${person.enabled}"/>
+						<g:checkBox name='enabled' value="${person.enabled}"/>
 					</td>
 				</tr>
 				<tr class="prop">
@@ -61,14 +61,14 @@
 				<tr class="prop">
 					<td valign="top" class="name"><label for="emailShow">Show Email:</label></td>
 					<td valign="top" class="value ${hasErrors(bean: person, field: 'emailShow', 'errors')}">
-						<g:checkBox name="emailShow" value="${person.emailShow}"/>
+						<g:checkBox name='emailShow' value="${person.emailShow}"/>
 					</td>
 				</tr>
 				<tr class="prop">
 					<td valign="top" class="name"><label>Roles:</label></td>
 					<td valign="top" class="value ${hasErrors(bean: person, field: 'authorities', 'errors')}">
 						<ul>
-						<g:each var="entry" in="${roleMap}">
+						<g:each var='entry' in="${roleMap}">
 							<li>${entry.key.authority.encodeAsHTML()}
 							<g:checkBox name="${entry.key.authority}" value="${entry.value}"/>
 							</li>
@@ -80,8 +80,8 @@
 			</table>
 		</div>
 		<div class="buttons">
-			<span class="button"><g:actionSubmit class="save" value="Update"/></span>
-			<span class="button"><g:actionSubmit class="delete" onclick="return confirm('Are you sure?');" value="Delete"/></span>
+			<span class="button"><g:actionSubmit class='save' value='Update'/></span>
+			<span class="button"><g:actionSubmit class='delete' onclick="return confirm('Are you sure?');" value='Delete'/></span>
 		</div>
 	</g:form>
 </div>

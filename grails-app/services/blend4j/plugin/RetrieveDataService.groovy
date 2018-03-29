@@ -1,31 +1,47 @@
 package blend4j.plugin
 
-import com.github.jmchilton.blend4j.galaxy.GalaxyInstance
 import com.github.jmchilton.blend4j.galaxy.GalaxyInstanceFactory
 import com.github.jmchilton.blend4j.galaxy.LibrariesClient
 import com.github.jmchilton.blend4j.galaxy.beans.FileLibraryUpload
 import com.github.jmchilton.blend4j.galaxy.beans.Library
-import com.github.jmchilton.blend4j.galaxy.beans.LibraryContent
 import com.github.jmchilton.blend4j.galaxy.beans.LibraryFolder
 import com.recomdata.transmart.domain.i2b2.AsyncJob
 import com.sun.jersey.api.client.ClientResponse
 import grails.transaction.Transactional
+import groovy.transform.CompileDynamic
+import groovy.transform.CompileStatic
+import groovy.util.logging.Slf4j
 import org.json.JSONObject
+import org.springframework.beans.factory.annotation.Autowired
+import org.transmart.plugin.shared.SecurityService
+import org.transmart.plugin.shared.UtilService
 
+@CompileStatic
+@Slf4j('logger')
 class RetrieveDataService {
 
+	@Autowired private SecurityService securityService
+	@Autowired private UtilService utilService
+
 	@Transactional
-	boolean saveStatusOfExport(String exportJobName, String lbraryName) {
+	boolean saveStatusOfExport(String exportJobName, String libraryName) {
 		try {
-			new StatusOfExport(
+			StatusOfExport soe = new StatusOfExport(
 					jobName: exportJobName,
 					jobStatus: 'Started',
-					lastExportName: lbraryName,
-					lastExportTime: new Date()).save()
-			true
+					lastExportName: libraryName,
+					lastExportTime: new Date())
+			soe.save()
+			if (soe.hasErrors()) {
+				logger.error 'StatusOfExport could not be saved: {}', utilService.errorStrings(soe)
+				false
+			}
+			else {
+				true
+			}
 		}
 		catch (e) {
-			log.error "The export job for galaxy couldn't be saved"
+			logger.error 'StatusOfExport could not be saved', e
 			false
 		}
 	}
@@ -33,21 +49,25 @@ class RetrieveDataService {
 	@Transactional
 	boolean updateStatusOfExport(String exportJobName, String newState) {
 		try {
-			StatusOfExport newJob = getLatest(StatusOfExport.findAllByJobName(exportJobName))
+			StatusOfExport newJob = getLatest(exportJobName)
 			newJob.jobStatus = newState
 			newJob.save()
-			true
+			if (!newJob.hasErrors()) {
+				return true
+			}
+			logger.error 'The export job for galaxy could not be updated: {}', utilService.errorStrings(newJob)
 		}
 		catch (e) {
-			log.error("The export job for galaxy couldn't be updated")
-			false
+			logger.error 'The export job for galaxy could not be updated', e
 		}
+
+		false
 	}
 
-	void uploadExportFolderToGalaxy(String galaxyUrl, String tempFolderDirectory, String userId,
+	void uploadExportFolderToGalaxy(String galaxyUrl, String tempFolderDirectory,
 	                                String exportJobName, String libraryName) {
 
-		GalaxyUserDetails gud = GalaxyUserDetails.findByUsername(userId)
+		GalaxyUserDetails gud = GalaxyUserDetails.findWhere(username: securityService.currentUsername())
 
 		LibrariesClient client = GalaxyInstanceFactory.get(galaxyUrl, gud.galaxyKey).librariesClient
 		Library persistedLibrary = client.createLibrary(new Library(libraryName + ' - ' + gud.mailAddress))
@@ -63,7 +83,8 @@ class RetrieveDataService {
 		createFoldersAndFiles(files, resultFolder, client, persistedLibrary.id)
 	}
 
-	void createFoldersAndFiles(File[] files, LibraryFolder rootFolder, LibrariesClient client, String persistedLibraryId) {
+	private void createFoldersAndFiles(File[] files, LibraryFolder rootFolder,
+	                                   LibrariesClient client, String persistedLibraryId) {
 		for (File file in files) {
 			if (file.isFile()) {
 				try {
@@ -93,33 +114,18 @@ class RetrieveDataService {
 	/**
 	 * Get the jobs to show in the galaxy jobs tab
 	 */
-	Map getjobs(String userName, String jobType = null) {
+	Map getjobs() {
+		List<AsyncJob> jobs = findJobs()
 		List<Map> rows = []
-
-		List<AsyncJob> jobs = AsyncJob.createCriteria() {
-			like('jobName', userName + '%')
-			if (jobType) {
-				eq('jobType', jobType)
-			}
-			else {
-				or {
-					ne('jobType', 'DataExport')
-					isNull('jobType')
-				}
-			}
-			ge('lastRunOn', new Date() - 7)
-			order('lastRunOn', 'desc')
-		}
-
 		for (AsyncJob job in jobs) {
-			Map m = [altViewerURL: job.altViewerURL,
+			Map m = [altViewerURL : job.altViewerURL,
 			         jobInputsJson: new JSONObject(job.jobInputsJson ?: '{}'),
-			         name: job.jobName,
-			         runTime: job.jobStatusTime,
-			         startDate: job.lastRunOn,
-			         status: job.jobStatus,
-			         viewerURL: job.viewerURL]
-			StatusOfExport d = getLatest(StatusOfExport.findAllByJobName(job.jobName))
+			         name         : job.jobName,
+			         runTime      : job.jobStatusTime,
+			         startDate    : job.lastRunOn,
+			         status       : job.jobStatus,
+			         viewerURL    : job.viewerURL]
+			StatusOfExport d = getLatest(job.jobName)
 			if (d) {
 				m.lastExportName = d.lastExportName
 				m.lastExportTime = d.lastExportTime.toString()
@@ -136,23 +142,15 @@ class RetrieveDataService {
 		[success: true, totalCount: jobs.size(), jobs: rows]
 	}
 
-	// TODO don't pull everything from the database and sort client-side to get the most recent
-	private StatusOfExport getLatest(List<StatusOfExport> exports) {
+	@CompileDynamic
+	private List<AsyncJob> findJobs() {
+		AsyncJob.findAllByJobTypeAndLastRunOnGreaterThanAndJobNameLike'DataExport',
+				new Date() - 7, securityService.currentUsername() + '%',
+				[sort: 'lastRunOn', order: 'desc']
+	}
 
-		switch (exports.size()) {
-			case 0:
-				log.error("An error has occured while exporting to galaxy. The job name doesn't exist in the database")
-				return null
-			case 1:
-				return exports[0]
-			default:
-				def latest = exports[0]
-				for (i in 1..exports.size() - 1) {
-					if (exports[i].id > latest.id) {
-						latest = exports[i]
-					}
-				}
-				return latest
-		}
+	@CompileDynamic
+	private StatusOfExport getLatest(String jobName) {
+		StatusOfExport.findByJobName jobName, [sort: 'id', order: 'desc']
 	}
 }

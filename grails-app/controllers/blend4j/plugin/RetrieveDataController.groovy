@@ -6,7 +6,6 @@ import org.springframework.beans.factory.annotation.Value
 class RetrieveDataController {
 
 	RetrieveDataService retrieveDataService
-	def springSecurityService
 
 	@Value('${com.galaxy.blend4j.galaxyURL:}')
 	private String galaxyUrl
@@ -18,7 +17,7 @@ class RetrieveDataController {
 		boolean ok = retrieveDataService.saveStatusOfExport(nameOfTheExportJob, nameOfTheLibrary)
 		if (ok) {
 			retrieveDataService.uploadExportFolderToGalaxy(galaxyUrl, tempFolderDirectory,
-					springSecurityService.principal.username, nameOfTheExportJob, nameOfTheLibrary)
+					nameOfTheExportJob, nameOfTheLibrary)
 			retrieveDataService.updateStatusOfExport(nameOfTheExportJob, 'Done')
 		}
 		else {
@@ -32,7 +31,7 @@ class RetrieveDataController {
 	 * Get the jobs to show in the galaxy jobs tab
 	 */
 	def getjobs() {
-		Map jobs = retrieveDataService.getjobs(springSecurityService.principal.username, 'DataExport')
+		Map jobs = retrieveDataService.getjobs()
 		render(jobs as JSON)
 	}
 }
